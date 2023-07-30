@@ -127,12 +127,35 @@ wss.on("connection", (socket, req) => {
                     }
                 })
             }
+
+            if (messageObj.method === "videoStatus") {
+                const userId = messageObj.userId
+                const roomClient = clients[messageObj.roomId]
+                roomClient.forEach((client) => {
+                    if (client.id !== userId) {
+                        client.client.send(JSON.stringify({
+                            ...messageObj,
+                        }))
+                    }
+                })
+            }
+
+            if (messageObj.method === "audioStatus") {
+                const userId = messageObj.userId
+                const roomClient = clients[messageObj.roomId]
+                roomClient.forEach((client) => {
+                    if (client.id !== userId) {
+                        client.client.send(JSON.stringify({
+                            ...messageObj,
+                        }))
+                    }
+                })
+            }
         }
 
     })
 
     socket.on("close", (data) => {
-        console.log("a client closed", socket.remark)
         const room = rooms[socket.remark.roomId]
         const client = clients[socket.remark.roomId]
         room.memberList.forEach((item, index) => {
@@ -143,19 +166,17 @@ wss.on("connection", (socket, req) => {
         if (room.memberList.length === 0) {
             delete rooms[socket.remark.roomId]
         }
-        console.log('room', rooms)
 
-        client.forEach((item, index) => {
-            console.log('exit client.id', item.id)
-            if (item.id === socket.remark.userId) {
-                client.splice(index, 1)
-            } else {
-                console.log('發送推出消息')
-                item.client.send(JSON.stringify({
-                    method: "leave",
-                    id: socket.remark.userId
-                }))
-            }
+        const leaveUserIndex = client.findIndex(item => {
+            return item.id === socket.remark.userId
+        })
+        client.splice(leaveUserIndex,1)
+
+        client.forEach(item => {
+            item.client.send(JSON.stringify({
+                method: "leave",
+                id: socket.remark.userId
+            }))
         })
 
         if (client.length === 0) {
