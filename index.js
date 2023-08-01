@@ -22,12 +22,9 @@ wss.on("connection", (socket, req) => {
         return wss.close()
     }
 
-    // socket.on("open", () => {
-
-    //
-    // })
     socket.send("ping")
-    setInterval(() => {
+
+    socket.intervalIndex = setInterval(() => {
         socket.send("nping")
     }, 180000)
 
@@ -36,7 +33,7 @@ wss.on("connection", (socket, req) => {
         if (message === "pong") {
             setTimeout(() => {
                 socket.send("ping")
-            }, 2000)
+            }, 1000)
         }
 
         if (message !== "pong" && message !== "npong") {
@@ -53,8 +50,9 @@ wss.on("connection", (socket, req) => {
                     name: messageObj.username,
                     id: id,
                     videoStatus: messageObj.videoStatus,
-                    audioStatus: true,
-                    isHasAuth: messageObj.isHasAuth
+                    audioStatus: messageObj.audioStatus,
+                    isHasAuth: messageObj.isHasAuth,
+                    isShareScreen: false
                 }
 
                 if (room) {
@@ -87,76 +85,25 @@ wss.on("connection", (socket, req) => {
 
             }
 
-            if (messageObj.method === "offer") {
-                const targetId = messageObj.targetId
-                const roomClient = clients[messageObj.roomId]
-                roomClient.forEach((client) => {
-                    if (client.id === targetId) {
-                        client.client.send(JSON.stringify({
-                            ...messageObj,
-                            targetId: messageObj.userId,
-                            userId: messageObj.targetId
-                        }))
-                    }
-                })
+            if (messageObj.method === "offer" || messageObj.method === "answer" || messageObj.method === "icecandidate") {
+                sendRTCMessage(messageObj)
             }
 
-            if (messageObj.method === "answer") {
-                const targetId = messageObj.targetId
-                const roomClient = clients[messageObj.roomId]
-                roomClient.forEach((client) => {
-                    if (client.id === targetId) {
-                        client.client.send(JSON.stringify({
-                            ...messageObj,
-                            targetId: messageObj.userId,
-                            userId: messageObj.targetId
-                        }))
-                    }
-                })
+            if (messageObj.method === "videoStatus" || messageObj.method === "audioStatus") {
+                changeStatus(messageObj, false)
             }
 
-            if (messageObj.method === "icecandidate") {
-                const targetId = messageObj.targetId
-                const roomClient = clients[messageObj.roomId]
-                roomClient.forEach((client) => {
-                    if (client.id === targetId) {
-                        client.client.send(JSON.stringify({
-                            ...messageObj,
-                            targetId: messageObj.userId,
-                        }))
-                    }
-                })
-            }
-
-            if (messageObj.method === "videoStatus") {
-                const userId = messageObj.userId
-                const roomClient = clients[messageObj.roomId]
-                roomClient.forEach((client) => {
-                    if (client.id !== userId) {
-                        client.client.send(JSON.stringify({
-                            ...messageObj,
-                        }))
-                    }
-                })
-            }
-
-            if (messageObj.method === "audioStatus") {
-                const userId = messageObj.userId
-                const roomClient = clients[messageObj.roomId]
-                roomClient.forEach((client) => {
-                    if (client.id !== userId) {
-                        client.client.send(JSON.stringify({
-                            ...messageObj,
-                        }))
-                    }
-                })
+            if (messageObj.method === "shareScreen") {
+                changeStatus(messageObj, true)
             }
         }
 
     })
 
     socket.on("close", (data) => {
-        const room = rooms[socket.remark.roomId]
+        clearInterval(socket.intervalIndex)
+        if (!socket.remark) return
+        const room = rooms[socket.remark?.roomId]
         const client = clients[socket.remark.roomId]
         room.memberList.forEach((item, index) => {
             if (item.id === socket.remark.userId) {
@@ -170,7 +117,7 @@ wss.on("connection", (socket, req) => {
         const leaveUserIndex = client.findIndex(item => {
             return item.id === socket.remark.userId
         })
-        client.splice(leaveUserIndex,1)
+        client.splice(leaveUserIndex, 1)
 
         client.forEach(item => {
             item.client.send(JSON.stringify({
@@ -182,7 +129,40 @@ wss.on("connection", (socket, req) => {
         if (client.length === 0) {
             delete clients[socket.remark.roomId]
         }
-        console.log('clients', clients)
 
     })
 })
+
+const sendRTCMessage = (messageObj) => {
+    const targetId = messageObj.targetId
+    const roomClient = clients[messageObj.roomId]
+    roomClient.forEach((client) => {
+        if (client.id === targetId) {
+            client.client.send(JSON.stringify({
+                ...messageObj,
+                targetId: messageObj.userId,
+                userId: messageObj.targetId
+            }))
+        }
+    })
+}
+
+const changeStatus = (messageObj, isAll) => {
+    const userId = messageObj.userId
+    const roomClient = clients[messageObj.roomId]
+    const memberList = rooms[messageObj.roomId].memberList
+    for (let i = 0; i < memberList.length; i++) {
+        if (memberList[i].id === userId) {
+            memberList[i][messageObj.method] = messageObj.status
+            break
+        }
+    }
+
+    roomClient.forEach((client) => {
+        if (client.id !== userId || isAll) {
+            client.client.send(JSON.stringify({
+                ...messageObj,
+            }))
+        }
+    })
+}
