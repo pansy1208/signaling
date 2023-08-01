@@ -1,13 +1,5 @@
-const Koa = require("koa")
-const cors = require("@koa/cors")
-const bodyParser = require("koa-bodyparser")
 const WebSocket = require("ws")
 const {v4: uuidV4} = require("uuid")
-
-const app = new Koa()
-
-app.use(cors())
-app.use(bodyParser())
 
 const rooms = {}
 const clients = {}
